@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::collections::{ring_buf, RingBuf};
 use std::iter;
 use std::fmt;
-use std::mem;
 use std::hash::{Hash, Writer};
 use std::num::Int;
 use traverse::Traversal;
@@ -206,11 +205,16 @@ impl<T> BList<T> {
     /// effort to preserve the node-size lower-bound invariant. This can have negative effects
     /// on the effeciency of the resulting list, but is otherwise much faster than a proper
     /// invariant-preserving `append`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the lists have a different value of `B`.
     pub fn append_lazy(&mut self, other: &mut BList<T>) {
-        let list = mem::replace(&mut other.list, DList::new());
-        self.list.append(list);
+        assert!(self.b == other.b);
+        self.list.append(&mut other.list);
+        self.len += other.len;
+        other.len = 0;
     }
-
 }
 
 
@@ -712,6 +716,36 @@ mod test {
                                                                    .map(|&s| s)
                                                                    .collect();
         assert!(list.to_string().as_slice() == "[just, one, test, more]");
+    }
+
+    #[test]
+    fn test_append_lazy() {
+        let mut u = list_from(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        let mut v = list_from(&[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]);
+        let w = list_from(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                            10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]);
+        let x = list_from(&[]);
+
+        // Normal append
+        u.append_lazy(&mut v);
+        assert_eq!(u.len(), 22);
+        assert_eq!(v.len(), 0);
+        assert_eq!(&u, &w);
+        assert_eq!(&v, &x);
+
+        // no-op append
+        u.append_lazy(&mut v);
+        assert_eq!(u.len(), 22);
+        assert_eq!(v.len(), 0);
+        assert_eq!(&u, &w);
+        assert_eq!(&v, &x);
+
+        // append into empty
+        v.append_lazy(&mut u);
+        assert_eq!(v.len(), 22);
+        assert_eq!(u.len(), 0);
+        assert_eq!(&v, &w);
+        assert_eq!(&u, &x);
     }
 }
 
